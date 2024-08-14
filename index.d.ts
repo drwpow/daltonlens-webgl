@@ -11,6 +11,12 @@ export declare const attrs: {
   a_resolution: string;
 };
 
+/** Color utils (sRGB, linear RGB, and LMS conversions) */
+export declare const colorUtils: string;
+
+/** Dalton utils (protanopia, deuteranopia, etc.) */
+export declare const daltonUtils: string;
+
 /** Vertex shader */
 export declare const vShader: string;
 

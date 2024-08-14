@@ -1,4 +1,4 @@
-import { COLOR_MODE } from "../index.js";
+import { COLOR_MODE, colorUtils, daltonUtils } from "../index.js";
 import {
   createProgram,
   orthographic,
@@ -26,18 +26,23 @@ precision highp float;
 in vec2 v_texcoord;
 
 uniform sampler2D u_texture;
-uniform uint u_color_mode;
+uniform int u_color_mode;
 
 out vec4 f_color;
 
+${colorUtils}
+
+${daltonUtils}
+
 void main() {
   f_color = texture(u_texture, v_texcoord);
-  if (u_color_mode == 1u) {
-    f_color = vec4(0.0, 1.0, 0.0, 1.0);
-  } else if (u_color_mode == 2u) {
-    f_color = vec4(0.0, 0.0, 1.0, 1.0);
+
+  if (u_color_mode != 0) {
+    f_color = simulateColorblindness(f_color, u_color_mode);
   }
 }`;
+
+console.log(F_SHADER);
 
 export class WebGL {
   canvasEl: HTMLCanvasElement;
@@ -68,7 +73,7 @@ export class WebGL {
   }: {
     canvasEl: HTMLCanvasElement;
     imgURL: string;
-    colorMode: keyof typeof COLOR_MODE;
+    colorMode?: keyof typeof COLOR_MODE;
   }) {
     this.canvasEl = canvasEl;
     this.gl = canvasEl.getContext("webgl2")!;
@@ -103,7 +108,7 @@ export class WebGL {
     );
 
     // set color mode (without rendering)
-    this.gl.uniform1ui(this.shader.dalton.u_color_mode, this.colorMode);
+    this.gl.uniform1i(this.shader.dalton.u_color_mode, this.colorMode);
 
     // Create a vertex array object (attribute state)
     this.vao = this.gl.createVertexArray();
@@ -177,9 +182,8 @@ export class WebGL {
     if (!(mode in COLOR_MODE)) {
       throw new Error(`Unsupported color mode "${mode}"`);
     }
-    console.log(`set color mode: ${mode}`);
     this.colorMode = COLOR_MODE[mode];
-    this.gl.uniform1ui(this.shader.dalton.u_color_mode, this.colorMode);
+    this.gl.uniform1i(this.shader.dalton.u_color_mode, this.colorMode);
     this.render();
   }
 
