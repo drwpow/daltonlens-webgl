@@ -1,0 +1,26 @@
+{
+  "name": "daltonlens-webgl",
+  "description": "Port of DaltonLens to WebGL. Exported to .glsl",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Drew Powers",
+    "email": "drew@pow.rs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drwpow/daltonlens-webgl"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "lint": "biome check",
+    "format": "biome format --write",
+    "dev": "vite dev",
+    "version": "pnpm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.8.3",
+    "vite": "^5.4.0"
+  }
+}
