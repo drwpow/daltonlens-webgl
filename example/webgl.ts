@@ -1,4 +1,4 @@
-import { COLOR_MODE, colorUtils, daltonUtils } from "../index.js";
+import { COLOR_MODE, daltonUtils } from "../index.js";
 import {
   createProgram,
   orthographic,
@@ -30,8 +30,6 @@ uniform int u_color_mode;
 
 out vec4 f_color;
 
-${colorUtils}
-
 ${daltonUtils}
 
 void main() {
@@ -41,8 +39,6 @@ void main() {
     f_color = simulateColorblindness(f_color, u_color_mode);
   }
 }`;
-
-console.log(F_SHADER);
 
 export class WebGL {
   canvasEl: HTMLCanvasElement;

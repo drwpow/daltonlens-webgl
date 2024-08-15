@@ -5,63 +5,58 @@ export const COLOR_MODE = {
   TRITANOPIA: 3,
 };
 
-export const attrs = {
-  a_color_mode: "a_color_mode",
-  a_position: "a_position",
-  a_resolution: "a_resolution",
-};
+/**
+ * DaltonLens WebGL shaders, updated to WebGL2.
+ * Insignificant modifications made based on personal taste.
+ * Available under the Unlicsnse license.
+ * @see https://github.com/DaltonLens/DaltonLens
+ */
+export const daltonUtils = `// Warning: GLSL mat3 initialization is column by column
+// DaltonLens-Python LMSModel_sRGB_SmithPokorny75.LMS_from_linearRGB
+const mat3 LMS_from_linearRGB = mat3(
+  0.17882, 0.03456, 0.00030, // column1
+  0.43516, 0.27155, 0.00184, // column2
+  0.04119, 0.03867, 0.01467  // column3
+);
 
-export const colorUtils = `float cbrt(float x) {
-  return sign(x) * pow(abs(x), 1.0 / 3.0);
+const mat3 linearRGB_from_LMS = mat3(
+    8.09444,  -1.02485, -0.03653, // column1
+  -13.05043,   5.40193, -0.41216, // column2
+   11.67206, -11.36147, 69.35132  // column3
+);
+
+// https://gamedev.stackexchange.com/questions/92015/optimized-linear-to-srgb-glsl
+// Converts a color from linear light gamma to sRGB gamma
+vec4 sRGB_from_RGB(vec4 linearRGB) {
+  bvec3 cutoff = lessThan(linearRGB.rgb, vec3(0.0031308));
+  vec3 higher = vec3(1.055)*pow(linearRGB.rgb, vec3(1.0/2.4)) - vec3(0.055);
+  vec3 lower = linearRGB.rgb * vec3(12.92);
+
+  return vec4(mix(higher, lower, cutoff), linearRGB.w);
 }
 
-float srgb_transfer_fn(float a) {
-  float v = abs(a);
-  return v <= 0.0031308 ? 12.92 * v : 1.055 * pow(v, (1.0 / 2.4)) - 0.055;
+vec4 sRGB_from_RGBClamped(vec4 rgba) {
+  return sRGB_from_RGB(clamp(rgba, 0.0, 1.0));
 }
 
-float srgb_inverse_transfer_fn(float a) {
-  float v = abs(a);
-  return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+// Converts a color from sRGB gamma to linear light gamma
+vec4 RGB_from_SRGB(vec4 sRGB) {
+  bvec3 cutoff = lessThan(sRGB.rgb, vec3(0.04045));
+  vec3 higher = pow((sRGB.rgb + vec3(0.055))/vec3(1.055), vec3(2.4));
+  vec3 lower = sRGB.rgb/vec3(12.92);
+
+  return vec4(mix(higher, lower, cutoff), sRGB.a);
 }
 
-vec4 srgb_to_linear_rgb(vec4 srgb) {
-  return vec4(
-    srgb_inverse_transfer_fn(srgb.x),
-    srgb_inverse_transfer_fn(srgb.y),
-    srgb_inverse_transfer_fn(srgb.z),
-    srgb.w
-  );
+vec4 LMS_from_RGBA(vec4 rgba) {
+  return vec4(LMS_from_linearRGB * rgba.xyz, rgba.w);
 }
 
-vec4 linear_rgb_to_srgb(vec4 linear_rgb) {
-  return vec4(
-    srgb_transfer_fn(linear_rgb.x),
-    srgb_transfer_fn(linear_rgb.y),
-    srgb_transfer_fn(linear_rgb.z),
-    linear_rgb.w
-  );
+vec4 RGBA_from_LMS(vec4 lms) {
+  return vec4(linearRGB_from_LMS * lms.xyz, lms.w);
 }
 
-vec4 linear_rgb_to_lms(vec4 linear_rgb) {
-  return vec4(
-    cbrt(0.4122214708 * linear_rgb.x + 0.5363325363 * linear_rgb.y + 0.0514459929 * linear_rgb.z),
-    cbrt(0.2119034982 * linear_rgb.x + 0.6806995451 * linear_rgb.y + 0.1073969566 * linear_rgb.z),
-    cbrt(0.0883024619 * linear_rgb.x + 0.2817188376 * linear_rgb.y + 0.6299787005 * linear_rgb.z),
-    linear_rgb.w
-  );
-}
-
-vec4 lms_to_linear_rgb(vec4 lms) {
-  return vec4(
-    +4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
-    -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
-    -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z,
-    lms.w
-  );
-}`;
-
-export const daltonUtils = `vec4 applyProtanope_Vienot(vec4 lms) {
+vec4 applyProtanope_Vienot(vec4 lms) {
   // DaltonLens-Python Simulator_Vienot1999.lms_projection_matrix
   lms[0] = 2.02344*lms[1] - 2.52580*lms[2];
   return lms;
@@ -98,48 +93,59 @@ vec4 simulateColorblindness(vec4 srgb, int colorMode) {
   if (colorMode == 0) {
     return srgb;
   }
-  vec4 lms = linear_rgb_to_lms(srgb_to_linear_rgb(srgb));
+  vec4 lms = LMS_from_RGBA(RGB_from_SRGB(srgb));
+  vec4 lmsSimulated = vec4(0.0, 1.0, 0.0, 1.0);
   switch (colorMode) {
-    case 1: lms = applyProtanope_Vienot(lms); break;
-    case 2: lms = applyDeuteranope_Vienot(lms); break;
-    case 3: lms = applyTritanope_Brettel1997(lms); break;
+    case 1: {
+      lmsSimulated = applyProtanope_Vienot(lms);
+      break;
+    }
+    case 2: {
+      lmsSimulated = applyDeuteranope_Vienot(lms);
+      break;
+    }
+    case 3: {
+      lmsSimulated = applyTritanope_Brettel1997(lms);
+      break;
+    }
   }
-  return linear_rgb_to_srgb(lms_to_linear_rgb(lms));
+  return sRGB_from_RGBClamped(RGBA_from_LMS(lmsSimulated));
 }`;
 
+/** @deprecated this isn’t working yet */
 export const vShader = `#version 300 es
 precision highp float;
 
-in float ${attrs.a_color_mode};
-in vec4 ${attrs.a_position};
-in vec2 ${attrs.a_resolution};
+in vec4 a_position;
+in vec2 a_texcoord;
 
-out float v_color_mode;
-out vec2 v_resolution;
-out vec4 v_color;
+uniform mat4 u_matrix;
+
+out vec2 v_texcoord;
 
 void main() {
-  v_color_mode = ${attrs.a_color_mode};
-  v_resolution = ${attrs.a_resolution};
-  gl_Position = a_position;
+   gl_Position = u_matrix * a_position;
+   v_texcoord = a_texcoord;
 }`;
 
+/** @deprecated this isn’t working yet */
 export const fShader = `#version 300 es
 precision highp float;
 
-in vec2 v_resolution;
-in float v_color_mode;
+in vec2 v_texcoord;
+
+uniform sampler2D u_texture;
+uniform int u_color_mode;
 
 out vec4 f_color;
 
-void main() {
-  // vec4 color = gl_FragColor;
-  vec2 pos = gl_FragCoord.xy / v_resolution;
+${daltonUtils}
 
-  if (v_color_mode == 1.0) {
-    f_color = vec4(0.0, 1.0, 0.0, 1.0);
-  } else if (v_color_mode == 2.0) {
-    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+void main() {
+  f_color = texture(u_texture, v_texcoord);
+
+  if (u_color_mode != 0) {
+    f_color = simulateColorblindness(f_color, u_color_mode);
   }
 }`;
 
